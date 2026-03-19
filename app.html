@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>English Podcast Learner Tool</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        Helvetica, Arial, sans-serif;
+    }
+    #app-title {
+      color: #1d4ed8;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    .takeaway-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      border-left: 4px solid #3b82f6;
+      background-color: #eff6ff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      transition: transform 0.1s;
+    }
+    .takeaway-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .summary-quote {
+      font-size: 1.125rem;
+      line-height: 1.75rem;
+      color: #4b5563;
+      border-left: 4px solid #3b82f6;
+      padding-left: 1.5rem;
+      font-style: italic;
+      margin: 1rem 0;
+    }
+    .audio-button {
+      background-color: #f0f0f0;
+      border: 1px solid #ddd;
+      color: #333;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin: 12px 0px;
+    }
+    .audio-button:hover {
+      background-color: #e5e5e5;
+      border-color: #ccc;
+    }
+    .audio-button.playing {
+      background-color: #007aff;
+      color: white;
+      border-color: #007aff;
+    }
+    .audio-button svg {
+      margin-right: 8px;
+      width: 18px;
+      height: 18px;
+    }
+    .tab-button {
+      padding: 10px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+    .tab-button.active {
+      color: #1d4ed8;
+      background-color: #f3f4f6;
+      border-bottom: 2px solid #1d4ed8;
+    }
+    .option-btn {
+      transition: all 0.15s ease-in-out;
+      text-align: left;
+      padding: 10px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      width: 100%;
+    }
+    .option-btn:hover:not(:disabled) {
+      background-color: #f9fafb;
+    }
+    .option-btn.correct {
+      background-color: #d1fae5;
+      border-color: #6ee7b7;
+      font-weight: 600;
+      color: #065f46;
+    }
+    .option-btn.incorrect {
+      background-color: #fee2e2;
+      border-color: #fca5a5;
+      font-weight: 600;
+      color: #991b1b;
+    }
+    .option-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.8;
+    }
+    #scoreboard {
+      background-color: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #b45309;
+    }
+    /* Overlay spinner covers entire main area when processing */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(2px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+  <main class="relative bg-white w-full max-w-3xl rounded-2xl shadow-xl p-6 md:p-10">
+    <!-- Overlay spinner -->
+    <div id="loading-overlay">
+      <div class="flex flex-col items-center text-gray-600">
+        <svg class="animate-spin h-10 w-10 text-blue-600 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="font-medium">AI is generating your lesson...</p>
+        <p class="text-sm">This can take a moment.</p>
+      </div>
+    </div>
+    <header class="text-center border-b border-gray-200 pb-6 mb-6">
+      <h1 id="app-title" class="text-4xl font-extrabold text-gray-900">
+        English Podcast Learner
+      </h1>
+      <p class="text-gray-600 mt-2">
+        Paste a short English podcast transcript to get started.
+      </p>
+    </header>
+
+    <section class="space-y-4">
+      <div class="flex justify-center space-x-2">
+        <button
+          id="tab-text"
+          class="py-2 px-4 rounded-lg font-medium text-white bg-blue-600 focus:outline-none"
+        >
+          Paste Text
+        </button>
+        <button
+          id="tab-link"
+          class="py-2 px-4 rounded-lg font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 focus:outline-none"
+        >
+          Podcast Link
+        </button>
+      </div>
+
+      <div id="text-input-container">
+        <textarea
+          id="transcript-input"
+          class="w-full h-40 p-4 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Paste your podcast transcript here... (Ideally less than 2000 words)"
+        ></textarea>
+      </div>
+
+      <div id="link-input-container" class="hidden text-center">
+        <p class="text-gray-500 bg-gray-100 p-4 rounded-lg">
+          <span class="font-semibold">Feature Coming Soon!</span><br />
+          Direct link processing is complex and requires a server. For now,
+          please use the "Paste Text" option.
+        </p>
+      </div>
+
+      <button
+        id="process-btn"
+        class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-all duration-200 flex items-center justify-center disabled:bg-gray-400"
+      >
+        <svg
+          id="process-icon"
+          class="w-5 h-5 mr-2"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M13 10V3L4 14h7v7l9-11h-7z"
+          ></path>
+        </svg>
+        <span id="process-btn-text">Process Transcript</span>
+      </button>
+    </section>
+
+        <!-- English Level Selection -->
+        <section id="level-section" class="mt-4">
+          <h2 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6 text-green-600 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 0110 15c0 1.25.101 2.502.301 3.752M4 7v10m0-2h4m-4 0h4m-4 0h4M12 7h.01M16 17a5 5 0 005-5V7h-4M5 19h10a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2z"
+              />
+            </svg>
+            Select Your English CEFR Level
+          </h2>
+          <div id="level-buttons" class="grid grid-cols-3 sm:grid-cols-6 gap-3"></div>
+          <p id="level-display" class="mt-2 text-sm text-gray-500"></p>
+        </section>
+        
+    <section id="results-section" class="hidden mt-8 border-t border-gray-200 pt-8">
+      <!-- <div
+        id="loading-spinner"
+        class="hidden flex-col items-center justify-center text-center text-gray-600"
+      >
+        <svg
+          class="animate-spin h-8 w-8 text-blue-600 mb-3"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
+        <p class="font-medium">AI is generating your lesson...</p>
+        <p class="text-sm">This can take a moment.</p>
+      </div> -->
+
+      <div id="results-content" class="hidden space-y-6">
+                        <!-- 5. Voice Select (ONLY Voice Select remains here) -->
+                <div id="audio-output" class="text-center mb-6">
+                    <div>
+                        <label for="voice-select" class="block text-sm font-medium text-gray-700 mb-1">Choose a Voice:</label>
+                        <select id="voice-select" class="w-full max-w-xs mx-auto p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    </div>
+                </div>
+
+
+        <div id="tabs-container">
+          <div class="flex border-b border-gray-200 bg-gray-50 rounded-t-lg">
+            <button
+              id="tab-summary-btn"
+              class="tab-button active flex-1 text-gray-600 hover:text-blue-700"
+            >
+              Summary
+            </button>
+            <button
+              id="tab-takeaways-btn"
+              class="tab-button flex-1 text-gray-600 hover:text-blue-700"
+            >
+              Key Takeaways
+            </button>
+            <button
+              id="tab-questions-btn"
+              class="tab-button flex-1 text-gray-600 hover:text-blue-700"
+            >
+              Quiz
+            </button>
+          </div>
+
+          <div
+            id="tab-content-container"
+            class="bg-white p-4 border border-t-0 border-gray-200 rounded-b-lg shadow-inner"
+          >
+            <div id="summary-tab" class="prose prose-blue max-w-none">
+              <p class="text-gray-500">Processing transcript...</p>
+            </div>
+
+            <div id="takeaways-tab" class="prose prose-blue max-w-none hidden">
+              <p class="text-gray-500">Processing transcript...</p>
+            </div>
+
+            <div id="questions-tab" class="space-y-4 hidden">
+              <p class="text-gray-500">Processing transcript...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="error-message"
+        class="hidden text-center text-red-600 bg-red-100 p-4 rounded-lg"
+      ></div>
+    </section>
+  </main>
+
+    <script type="module">
+        const tabText = document.getElementById('tab-text');
+        const tabLink = document.getElementById('tab-link');
+        const textInputContainer = document.getElementById('text-input-container');
+        const linkInputContainer = document.getElementById('link-input-container');
+        const transcriptInput = document.getElementById('transcript-input');
+        const processBtn = document.getElementById('process-btn');
+        const processBtnText = document.getElementById('process-btn-text');
+        const processIcon = document.getElementById('process-icon');
+        const resultsSection = document.getElementById('results-section');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const resultsContent = document.getElementById('results-content');
+        const errorMessage = document.getElementById('error-message');
+        const tabSummaryBtn = document.getElementById('tab-summary-btn');
+        const tabTakeawaysBtn = document.getElementById('tab-takeaways-btn');
+        const tabQuestionsBtn = document.getElementById('tab-questions-btn');
+        const summaryOutput = document.getElementById('summary-tab');
+        const learningOutput = document.getElementById('takeaways-tab');
+        const questionsOutput = document.getElementById('questions-tab');
+        const voiceSelect = document.getElementById('voice-select');
+
+        const synth = window.speechSynthesis;
+        let voices = [];
+        let currentScore = 0;
+        let totalQuestions = 0;
+
+        const levels = [
+        { level: 'A1', display: 'A1 - Beginner' },
+        { level: 'A2', display: 'A2 - Elementary' },
+        { level: 'B1', display: 'B1 - Intermediate' },
+        { level: 'B2', display: 'B2 - Upper-Intermediate' },
+        { level: 'C1', display: 'C1 - Advanced' },
+        { level: 'C2', display: 'C2 - Proficient' },
+        ];
+        let selectedLevel = levels[2].level; // default B1
+        let isBusy = false;
+
+        // generate level buttons
+        const levelButtons = document.getElementById('level-buttons');
+        const levelDisplay = document.getElementById('level-display');
+        levels.forEach((lvl) => {
+        const btn = document.createElement('div');
+        btn.textContent = lvl.level;
+        btn.className =
+            'level-card p-3 rounded-lg text-center font-medium text-sm transition cursor-pointer bg-gray-100 text-gray-700 hover:bg-green-50';
+        btn.addEventListener('click', () => {
+            if (isBusy) return;
+            selectedLevel = lvl.level;
+            document
+            .querySelectorAll('.level-card')
+            .forEach((b) =>
+                b.classList.remove(
+                'bg-green-600',
+                'text-white',
+                'shadow-md',
+                'ring-2',
+                'ring-green-500'
+                )
+            );
+            btn.classList.add(
+            'bg-green-600',
+            'text-white',
+            'shadow-md',
+            'ring-2',
+            'ring-green-500'
+            );
+            levelDisplay.textContent = `The analysis will be tailored for a ${lvl.display} learner.`;
+        });
+        levelButtons.appendChild(btn);
+        });
+        levelDisplay.textContent = `The analysis will be tailored for a ${levels.find(
+        (l) => l.level === selectedLevel
+        ).display} learner.`;
+        /**
+         * Creates the audio play/pause button HTML.
+         */
+        function createAudioButton(id) {
+             return `
+                <button id="${id}" class="audio-button">
+                    <svg id="play-icon-${id}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                    </svg>
+                    <svg id="pause-icon-${id}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="hidden">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                    </svg>
+                    <span id="audio-btn-text-${id}">Listen</span>
+                </button>
+            `;
+        }
+
+        /**
+         * Sets up the event listener and state management for a dedicated audio button.
+         * @param {string} buttonId - ID of the button element (e.g., 'play-summary-btn')
+         * @param {function} getTextFn - Function that returns the string content to be spoken
+         */
+        function setupButtonAudio(buttonId, getTextFn) {
+            const button = document.getElementById(buttonId);
+            if (!button) return;
+
+            const playIcon = document.getElementById(`play-icon-${buttonId}`);
+            const pauseIcon = document.getElementById(`pause-icon-${buttonId}`);
+            const audioBtnText = document.getElementById(`audio-btn-text-${buttonId}`);
+            let localUtterance = null;
+            let localIsPlaying = false;
+
+            const resetLocalState = () => {
+                localIsPlaying = false;
+                button.classList.remove('playing');
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                audioBtnText.textContent = 'Listen';
+            };
+            
+            // Initial button setup
+            resetLocalState();
+
+            button.addEventListener('click', () => {
+                // Force cancel any *other* running speech before starting a new one
+                if (synth.speaking && localUtterance && !synth.paused) {
+                    synth.cancel();
+                    // Reset all button states to ensure clean slate, as cancel is async
+                    [tabSummaryBtn, tabTakeawaysBtn].forEach(tab => {
+                        if (tab.id !== buttonId) {
+                            // Find and reset the other button's state visually
+                            const otherButton = document.getElementById(tab.id);
+                            if (otherButton) {
+                                otherButton.classList.remove('playing');
+                                document.getElementById(`play-icon-${otherButton.id}`)?.classList.remove('hidden');
+                                document.getElementById(`pause-icon-${otherButton.id}`)?.classList.add('hidden');
+                                document.getElementById(`audio-btn-text-${otherButton.id}`) && (document.getElementById(`audio-btn-text-${otherButton.id}`).textContent = 'Listen');
+                            }
+                        }
+                    });
+                }
+                
+                // Audio is currently speaking, so pause it
+                if (localIsPlaying && !synth.paused) {
+                    synth.pause();
+                    localIsPlaying = false;
+                    button.classList.remove('playing');
+                    playIcon.classList.remove('hidden');
+                    pauseIcon.classList.add('hidden');
+                    audioBtnText.textContent = 'Resume';
+                    return;
+                } 
+                
+                // Audio is paused, so resume it
+                if (synth.paused && localUtterance) {
+                    synth.resume();
+                    localIsPlaying = true;
+                    button.classList.add('playing');
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                    audioBtnText.textContent = 'Pause';
+                    return;
+                }
+
+                // Start new speech
+                const textToSpeak = getTextFn();
+                if (!textToSpeak.trim()) {
+                    console.warn("No text available to speak.");
+                    return;
+                }
+
+                synth.cancel(); // Stop any final running process
+
+                localUtterance = new SpeechSynthesisUtterance(textToSpeak);
+                
+                // Set voice
+                const selectedVoiceName = voiceSelect.value;
+                localUtterance.voice = voices.find(voice => voice.name === selectedVoiceName);
+
+                // Set event handlers
+                localUtterance.onend = resetLocalState;
+                localUtterance.onpause = () => {
+                    localIsPlaying = false;
+                    button.classList.remove('playing');
+                    playIcon.classList.remove('hidden');
+                    pauseIcon.classList.add('hidden');
+                    audioBtnText.textContent = 'Resume';
+                };
+                localUtterance.onerror = (e) => {
+                    console.error("TTS Error:", e);
+                    resetLocalState();
+                };
+
+                synth.speak(localUtterance);
+
+                // Update UI state for playing
+                localIsPlaying = true;
+                button.classList.add('playing');
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                audioBtnText.textContent = 'Pause';
+            });
+        }
+
+
+        // --- Tabbed Input Logic ---
+        tabText.addEventListener('click', () => {
+            textInputContainer.classList.remove('hidden');
+            linkInputContainer.classList.add('hidden');
+            tabText.classList.add('bg-blue-600', 'text-white');
+            tabText.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+            tabLink.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+            tabLink.classList.remove('bg-blue-600', 'text-white');
+                // ✅ Enable process button for text input
+            processBtn.disabled = false;
+            processBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+            processBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        });
+
+        tabLink.addEventListener('click', () => {
+            textInputContainer.classList.add('hidden');
+            linkInputContainer.classList.remove('hidden');
+            tabLink.classList.add('bg-blue-600', 'text-white');
+            tabLink.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+            tabText.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+            tabText.classList.remove('bg-blue-600', 'text-white');
+                // ✅ Disable process button for podcast link mode
+            processBtn.disabled = true;
+            processBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            processBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+        });
+
+        // --- Tab Switching Logic ---
+        function switchTab(activeTabId) {
+            // Tab Content array
+            const contents = [
+                { id: 'summary', content: summaryOutput, button: tabSummaryBtn },
+                { id: 'takeaways', content: learningOutput, button: tabTakeawaysBtn },
+                { id: 'questions', content: questionsOutput, button: tabQuestionsBtn }
+            ];
+
+            contents.forEach(item => {
+                if (item.id === activeTabId) {
+                    item.content.classList.remove('hidden');
+                    item.button.classList.add('active');
+                } else {
+                    item.content.classList.add('hidden');
+                    item.button.classList.remove('active');
+                }
+            });
+            
+            // Only stop speech when switching tabs. The new dedicated buttons handle their own state.
+            if(synth.speaking || synth.paused) { 
+                synth.cancel();
+            }
+        }
+
+        // Add event listeners for new tabs
+        tabSummaryBtn.addEventListener('click', () => switchTab('summary'));
+        tabTakeawaysBtn.addEventListener('click', () => switchTab('takeaways'));
+        tabQuestionsBtn.addEventListener('click', () => switchTab('questions'));
+
+        // --- Text-to-Speech (TTS) Logic ---
+        function populateVoiceList() {
+            voices = synth.getVoices();
+            const currentVal = voiceSelect.value;
+            voiceSelect.innerHTML = '';
+            
+            const englishVoices = voices.filter(voice => voice.lang.startsWith('en-'));
+            
+            const targetVoices = englishVoices.length > 0 ? englishVoices : voices;
+
+            targetVoices.forEach(voice => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})${voice.localService ? ' [Local]' : ''}`;
+                option.value = voice.name;
+                voiceSelect.appendChild(option);
+            });
+
+            voiceSelect.value = currentVal;
+            if(voiceSelect.selectedIndex === -1 && voiceSelect.options.length > 0) {
+                voiceSelect.selectedIndex = 0; 
+            }
+        }
+
+
+        populateVoiceList();
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = populateVoiceList;
+        }
+
+
+
+        window.addEventListener('beforeunload', () => {
+            synth.cancel();
+        });
+
+        // --- Quiz Rendering and Logic ---
+        
+        /**
+         * Renders the scoreboard element
+         */
+        function renderScoreboard() {
+            return `
+                <div id="scoreboard" class="p-3 mb-6 rounded-lg shadow-sm flex justify-between items-center font-bold">
+                    <span>Quiz Progress:</span>
+                    <span id="current-score">${currentScore} / ${totalQuestions}</span>
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders the interactive practice questions
+         * @param {Array} questionGroups - Array of question groups from the AI
+         */
+        // function renderPracticeQuestions(questionGroups) {
+        //     currentScore = 0;
+        //     totalQuestions = 0;
+        //     questionsOutput.innerHTML = '';
+            
+        //     if (!questionGroups || questionGroups.length === 0) {
+        //         questionsOutput.innerHTML = '<p class="text-gray-500">No practice questions were generated for this text.</p>';
+        //         return;
+        //     }
+
+        //     // Calculate total questions
+        //     questionGroups.forEach(group => {
+        //         totalQuestions += group.questions ? group.questions.length : 0;
+        //     });
+
+        //     // 1. Render Scoreboard
+        //     questionsOutput.innerHTML = renderScoreboard();
+        //     const quizContentDiv = document.createElement('div');
+        //     quizContentDiv.id = 'quiz-content';
+        //     quizContentDiv.className = 'space-y-4';
+        //     questionsOutput.appendChild(quizContentDiv);
+
+        //     let questionCounter = 1;
+
+        //     questionGroups.forEach(group => {
+        //         // Create header for the takeaway
+        //         const groupHeader = document.createElement('h3');
+        //         groupHeader.className = "text-lg font-semibold text-gray-800 mb-2 pt-4 border-t border-gray-100 first:border-t-0 first:pt-0";
+        //         groupHeader.innerHTML = group.takeaway;
+        //         quizContentDiv.appendChild(groupHeader);
+
+        //         if (!group.questions || group.questions.length === 0) return;
+
+        //         // Loop through questions in this group
+        //         group.questions.forEach(question => {
+        //             const currentQuestion = question;
+        //             const questionDiv = document.createElement('div');
+        //             questionDiv.className = 'py-4';
+        //             questionDiv.dataset.answered = 'false';
+
+        //             // Add question number and text
+        //             const questionText = document.createElement('p');
+        //             questionText.className = 'font-medium text-gray-900 mb-3';
+        //             questionText.innerHTML = `<strong>Question ${questionCounter}:</strong> ${currentQuestion.questionText}`;
+        //             questionDiv.appendChild(questionText);
+
+        //             const optionsDiv = document.createElement('div');
+        //             optionsDiv.className = 'flex flex-col space-y-2';
+
+        //             const feedbackDiv = document.createElement('div');
+        //             feedbackDiv.className = 'hidden mt-3 p-2 rounded-lg text-sm';
+
+        //             // Create buttons for each option
+        //             currentQuestion.options.forEach(option => {
+        //                 const button = document.createElement('button');
+        //                 button.textContent = option;
+        //                 button.className = 'option-btn';
+                        
+        //                 button.addEventListener('click', () => {
+        //                     handleAnswerClick(button, option, currentQuestion.correctAnswer, feedbackDiv, optionsDiv, questionDiv);
+        //                 });
+        //                 optionsDiv.appendChild(button);
+        //             });
+
+        //             questionDiv.appendChild(optionsDiv);
+        //             questionDiv.appendChild(feedbackDiv);
+        //             quizContentDiv.appendChild(questionDiv);
+        //             questionCounter++;
+        //         });
+        //     });
+        // }
+        function renderPracticeQuestions(questionGroups) {
+          currentScore = 0;
+          totalQuestions = 0;
+          questionsOutput.innerHTML = '';
+
+          if (!questionGroups || questionGroups.length === 0) {
+            questionsOutput.innerHTML =
+              '<p class="text-gray-500">No practice questions were generated for this text.</p>';
+            return;
+          }
+
+          // Count total questions
+          questionGroups.forEach(group => {
+            totalQuestions += group.questions ? group.questions.length : 0;
+          });
+
+          // Render scoreboard
+          questionsOutput.innerHTML = renderScoreboard();
+          const quizContentDiv = document.createElement('div');
+          quizContentDiv.id = 'quiz-content';
+          quizContentDiv.className = 'space-y-4';
+          questionsOutput.appendChild(quizContentDiv);
+
+          let questionCounter = 1;
+
+          questionGroups.forEach((group, groupIndex) => {
+            // --- Wrapper for each group ---
+            // remove any "practice for" prefix before creating ID
+            const safeId = group.takeaway
+              .replace(/^practice\s+for\s+/i, '')   // <-- remove the prefix
+              .replace(/[^a-zA-Z0-9]+/g, '-')       // replace spaces/symbols
+              .toLowerCase();
+
+
+            const groupWrapper = document.createElement('div');
+            groupWrapper.className = 'border-t border-gray-100 pt-4 first:border-t-0 first:pt-0';
+            groupWrapper.id = `quiz-${safeId}`;
+
+            // --- Header Row (clickable) ---
+            const headerRow = document.createElement('div');
+            headerRow.className =
+              'flex justify-between items-center cursor-pointer select-none transition-colors hover:bg-gray-50 rounded-lg px-2 py-2';
+
+            const headerText = document.createElement('h3');
+            headerText.className = 'text-lg font-semibold text-gray-800';
+            headerText.innerHTML = group.takeaway;
+
+            const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            arrowIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            arrowIcon.setAttribute('fill', 'none');
+            arrowIcon.setAttribute('viewBox', '0 0 24 24');
+            arrowIcon.setAttribute('stroke-width', '2');
+            arrowIcon.setAttribute('stroke', 'currentColor');
+            arrowIcon.classList.add('h-5', 'w-5', 'text-gray-500', 'transition-transform', 'duration-200');
+            arrowIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />`;
+
+            headerRow.appendChild(headerText);
+            headerRow.appendChild(arrowIcon);
+            groupWrapper.appendChild(headerRow);
+
+            // --- Collapsible Questions Container ---
+            const collapsibleDiv = document.createElement('div');
+            collapsibleDiv.className = 'mt-2 hidden pl-2 border-l border-gray-200';
+
+            if (group.questions && group.questions.length > 0) {
+              group.questions.forEach(question => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'py-4';
+                questionDiv.dataset.answered = 'false';
+
+                const questionText = document.createElement('p');
+                questionText.className = 'font-medium text-gray-900 mb-3';
+                questionText.innerHTML = `<strong>Question ${questionCounter}:</strong> ${question.questionText}`;
+                questionDiv.appendChild(questionText);
+
+                const optionsDiv = document.createElement('div');
+                optionsDiv.className = 'flex flex-col space-y-2';
+
+                const feedbackDiv = document.createElement('div');
+                feedbackDiv.className = 'hidden mt-3 p-2 rounded-lg text-sm';
+
+                question.options.forEach(option => {
+                  const button = document.createElement('button');
+                  button.textContent = option;
+                  button.className = 'option-btn';
+                  button.addEventListener('click', () =>
+                    handleAnswerClick(
+                      button,
+                      option,
+                      question.correctAnswer,
+                      feedbackDiv,
+                      optionsDiv,
+                      questionDiv
+                    )
+                  );
+                  optionsDiv.appendChild(button);
+                });
+
+                questionDiv.appendChild(optionsDiv);
+                questionDiv.appendChild(feedbackDiv);
+                collapsibleDiv.appendChild(questionDiv);
+                questionCounter++;
+              });
+            }
+
+            groupWrapper.appendChild(collapsibleDiv);
+            quizContentDiv.appendChild(groupWrapper);
+
+            // --- Toggle Logic (click anywhere on header row) ---
+            let expanded = false;
+            headerRow.addEventListener('click', () => {
+              expanded = !expanded;
+              if (expanded) {
+                collapsibleDiv.classList.remove('hidden');
+                arrowIcon.classList.add('rotate-180');
+              } else {
+                collapsibleDiv.classList.add('hidden');
+                arrowIcon.classList.remove('rotate-180');
+              }
+            });
+          });
+        }
+        function bindTakeawayLinksToQuiz() {
+
+            const takeawayLinks = document.querySelectorAll('#takeaways-tab [data-quiz-id]');
+            const quizItems = document.querySelectorAll('#questions-tab [id^="quiz-"]');
+
+            if (!takeawayLinks.length || !quizItems.length) {
+              console.warn('No links or quiz items yet; will retry binding.');
+              setTimeout(bindTakeawayLinksToQuiz, 300);
+              return;
+            }
+
+            takeawayLinks.forEach(el => {
+              el.addEventListener('click', e => {
+                e.preventDefault();
+                const targetId = el.getAttribute('data-quiz-id');
+                const target = document.getElementById(targetId);
+
+                if (!target) {
+                  console.warn('Quiz target not found for', targetId);
+                  return;
+                }
+
+                // Switch to Quiz tab
+                switchTab('questions');
+
+                // Collapse all other quiz sections
+                document.querySelectorAll('#questions-tab [id^="quiz-"]').forEach(q => {
+                  const collapsible = q.querySelector('.mt-2');
+                  const arrow = q.querySelector('svg');
+                  if (collapsible && !collapsible.classList.contains('hidden')) {
+                    collapsible.classList.add('hidden');
+                    arrow?.classList.remove('rotate-180');
+                  }
+                });
+
+                // Expand section
+                const collapsible = target.querySelector('.mt-2');
+                const arrow = target.querySelector('svg');
+                if (collapsible && collapsible.classList.contains('hidden')) {
+                  collapsible.classList.remove('hidden');
+                  arrow?.classList.add('rotate-180');
+                }
+
+                // Highlight & scroll
+                target.classList.add('ring-2', 'ring-green-400', 'ring-offset-2');
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setTimeout(() => target.classList.remove('ring-2', 'ring-green-400', 'ring-offset-2'), 1200);
+              });
+            });
+
+            console.log(`Bound ${takeawayLinks.length} takeaway links to ${quizItems.length} quiz groups.`);
+        }
+
+        /**
+         * Renders the key takeaways from the structured JSON data
+         * @param {Array} takeaways - Array of takeaway objects
+         */
+        function renderKeyTakeaways(takeaways) {
+            learningOutput.innerHTML = '';
+
+            if (!takeaways || takeaways.length === 0) {
+                learningOutput.innerHTML = '<p class="text-gray-500">No key takeaways were generated.</p>';
+                return;
+            }
+                        // Inject the dedicated audio button for takeaways
+            let listHtml = createAudioButton('play-takeaways-btn');
+            // Build the takeaway list
+            listHtml += '<div class="space-y-3">';
+            takeaways.forEach(item => {
+                const phrase = item.phrase || 'N/A';
+                const definition = item.definition || 'No definition provided.';
+                const example = item.example || 'No example provided.';
+
+                listHtml += `<div class="takeaway-item">
+                    <p class="font-bold text-blue-800 cursor-pointer hover:underline" 
+                      data-quiz-id="quiz-${phrase.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}">
+                      ${phrase}:
+                    </p>
+                    <p class="text-gray-700">${definition}</p>
+                    <p class="text-sm text-gray-600 mt-1 italic">Example: ${example}</p>
+                </div>`;
+            });
+            listHtml += '</div>';
+
+
+            
+            learningOutput.innerHTML = listHtml;
+
+            // Setup audio for the new button
+            setupButtonAudio('play-takeaways-btn', () => learningOutput.innerText.replace('Listen', '').replace('Pause', '').replace('Resume', '').trim());
+        }
+
+        /**
+         * Updates the score display in the scoreboard
+         */
+        function updateScoreDisplay() {
+            const scoreElement = document.getElementById('current-score');
+            if (scoreElement) {
+                scoreElement.textContent = `${currentScore} / ${totalQuestions}`;
+            }
+        }
+        
+        /**
+         * Handles the logic when a quiz option is clicked
+         */
+        function handleAnswerClick(selectedButton, selectedOption, correctAnswer, feedbackDiv, optionsContainer, questionDiv) {
+            if (questionDiv.dataset.answered === 'true') {
+                // Prevent double-clicking/re-scoring
+                return; 
+            }
+
+            questionDiv.dataset.answered = 'true';
+            
+            // Disable all buttons in this question
+            const allButtons = optionsContainer.querySelectorAll('.option-btn');
+            allButtons.forEach(btn => {
+                btn.disabled = true;
+            });
+
+            // Check if correct
+            if (selectedOption === correctAnswer) {
+                selectedButton.classList.add('correct');
+                feedbackDiv.textContent = 'Correct! Well done.';
+                feedbackDiv.className = 'mt-3 p-2 rounded-lg text-sm bg-green-100 text-green-800 font-semibold';
+                
+                // Score Update
+                currentScore++;
+                updateScoreDisplay();
+                
+                // Simple animation feedback: flash green border
+                questionDiv.style.border = '2px solid #34d399'; // green-400
+                setTimeout(() => {
+                    questionDiv.style.border = 'none';
+                }, 500);
+
+
+            } else {
+                selectedButton.classList.add('incorrect');
+                feedbackDiv.textContent = `Not quite. The correct answer is: ${correctAnswer}`;
+                feedbackDiv.className = 'mt-3 p-2 rounded-lg text-sm bg-red-100 text-red-800 font-semibold';
+                
+                // Highlight the correct answer
+                allButtons.forEach(btn => {
+                    if (btn.textContent === correctAnswer) {
+                        btn.classList.add('correct');
+                    }
+                });
+            }
+            feedbackDiv.classList.remove('hidden');
+        }
+
+        
+        // --- AI Processing Logic ---
+        processBtn.addEventListener('click', async () => {
+            const transcript = transcriptInput.value;
+            if (!transcript.trim()) {
+                showError("Please paste a transcript first.");
+                return;
+            }
+
+            setLoadingState(true);
+
+            try {
+                // Call the AI
+                const result = await callGeminiApi(transcript);
+                
+                // Parse the JSON response
+                const { summary, keyTakeaways, practiceQuestions } = JSON.parse(result.text);
+
+                // Populate the UI
+                
+                // Summary Tab
+                let summaryHtml = `<blockquote class="summary-quote">${summary}</blockquote>`;
+                summaryHtml += createAudioButton('play-summary-btn');
+                summaryOutput.innerHTML = summaryHtml;
+                
+                // Key Takeaways Tab
+                renderKeyTakeaways(keyTakeaways);
+                
+                // Quiz Tab
+                renderPracticeQuestions(practiceQuestions);
+
+                // Set up audio for summary *after* it's been injected
+                setupButtonAudio('play-summary-btn', () => summaryOutput.querySelector('.summary-quote')?.textContent || '');
+
+                // ✅ Ensure takeaway link binding happens AFTER DOM is rendered
+
+                bindTakeawayLinksToQuiz();
+
+                // Optional: debug check
+                // console.log(
+                //     'Linked quiz IDs:',
+                //     Array.from(document.querySelectorAll('[id^="quiz-"]')).map(e => e.id)
+                // );
+
+
+                // Show results and switch to summary
+                setLoadingState(false);
+                resultsContent.classList.remove('hidden');
+                
+                // Automatically switch to the summary tab on successful generation
+                switchTab('summary'); 
+
+            } catch (error) {
+                console.error("Error processing transcript:", error);
+                showError("An error occurred while analyzing the text or parsing the quiz data. Please try again with a different transcript. (Check console for details)");
+                setLoadingState(false);
+            }
+        });
+
+        async function callGeminiApi(transcript) {
+            // System prompt now instructs the model to adhere to the schema
+            const systemPrompt = `You are an expert English as a Second Language (ESL) tutor. A student has provided a podcast transcript. Your task is to analyze it and return a SINGLE, valid JSON object that strictly adheres to the provided JSON schema.`;
+            
+            const userQuery = `Here is the transcript:\n\n${transcript}`;
+            
+            // const apiKey = "";
+            const apiUrl = "/proxy/gemini";
+
+            // const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            // --- Using responseSchema for strictly structured output ---
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "summary": {
+                                "type": "STRING",
+                                "description": "A concise, one-paragraph summary of the transcript (as a plain text string)."
+                            },
+                            "keyTakeaways": {
+                                "type": "ARRAY",
+                                "description": `A list of everyday idioms, phrasal verbs, and lifestyle vocabulary (maximum 50, please find as much useful expression as you can) from the text to help an English learner at the CEFR ${selectedLevel} level to improve their language skills.`,
+                                "items": {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                    "phrase": { "type": "STRING", "description": "The key word or phrase." },
+                                    "definition": { "type": "STRING", "description": "A clear and simple definition of the phrase." },
+                                    "example": { "type": "STRING", "description": "An example sentence demonstrating how to use the phrase." }
+                                    },
+                                    "propertyOrdering": ["phrase", "definition", "example"]
+                                    }
+                            },
+                            "practiceQuestions": {
+                                "type": "ARRAY",
+                                "description": "An array of question group objects for practice.(maximum 150) maake sure 3 questions for each takeaway",
+                                "items": {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "takeaway": { "type": "STRING", "description": "A string formatted as: 'Practice for [The Takeaway Phrase]'" },
+                                        "questions": {
+                                            "type": "ARRAY",
+                                            "description": "2-3 multiple choice questions based on the takeaway.",
+                                            "items": {
+                                                "type": "OBJECT",
+                                                "properties": {
+                                                    "questionText": { "type": "STRING" },
+                                                    "options": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                                    "correctAnswer": { "type": "STRING" }
+                                                },
+                                                "propertyOrdering": ["questionText", "options", "correctAnswer"]
+                                            }
+                                        }
+                                    },
+                                    "propertyOrdering": ["takeaway", "questions"]
+                                }
+                            }
+                        },
+                        "propertyOrdering": ["summary", "keyTakeaways", "practiceQuestions"]
+                    }
+                }
+            };
+            
+            // --- API Fetch with Retry Logic ---
+            let response;
+            let retries = 3;
+            let delay = 1000;
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        const candidate = result.candidates?.[0];
+                        if (candidate && candidate.content?.parts?.[0]?.text) {
+                            return { text: candidate.content.parts[0].text };
+                        }
+                    }
+
+                    throw new Error(`API request failed with status ${response.status}`);
+
+                } catch (error) {
+                    console.warn(`API call attempt ${i + 1} failed. Retrying in ${delay / 1000}s...`);
+                    if (i < retries - 1) {
+                        await new Promise(res => setTimeout(res, delay));
+                        delay *= 2;
+                    } else {
+                        throw error;
+                    }
+                }
+            }
+        }
+
+        // --- UI Helper Functions ---
+        // function setLoadingState(isLoading) {
+        //     if (isLoading) {
+        //         processBtn.disabled = true;
+        //         processBtnText.textContent = "Processing...";
+        //         processIcon.classList.add('animate-spin');
+        //         resultsSection.classList.remove('hidden');
+        //         loadingSpinner.classList.remove('hidden');
+        //         loadingSpinner.classList.add('flex');
+        //         resultsContent.classList.add('hidden');
+        //         errorMessage.classList.add('hidden');
+        //         synth.cancel();
+        //     } else {
+        //         processBtn.disabled = false;
+        //         processBtnText.textContent = "Process Transcript";
+        //         processIcon.classList.remove('animate-spin');
+        //         loadingSpinner.classList.add('hidden');
+        //         loadingSpinner.classList.remove('flex');
+        //     }
+        // }
+
+        function setLoadingState(isLoading) {
+          const overlay = document.getElementById('loading-overlay');
+          if (isLoading) {
+            processBtn.disabled = true;
+            processBtnText.textContent = "Processing...";
+            processIcon.classList.add('animate-spin');
+            overlay.style.display = 'flex'; // show overlay spinner
+            resultsSection.classList.remove('hidden'); // ensure section visible
+            resultsContent.classList.add('hidden'); // hide generated results while processing
+            errorMessage.classList.add('hidden');
+            synth.cancel();
+          } else {
+            processBtn.disabled = false;
+            processBtnText.textContent = "Process Transcript";
+            processIcon.classList.remove('animate-spin');
+            overlay.style.display = 'none'; // hide overlay spinner
+            resultsContent.classList.remove('hidden'); // ✅ show results again
+          }
+        }
+
+
+
+        function showError(message) {
+            resultsSection.classList.remove('hidden');
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+            resultsContent.classList.add('hidden');
+            loadingSpinner.classList.add('hidden');
+        }
+
+    </script>
+</body>
+</html>
