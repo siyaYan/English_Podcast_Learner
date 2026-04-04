@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import styles from "./page.module.css";
 
 const LEVELS = [
@@ -76,7 +77,7 @@ function buildGeminiPayload(transcript, selectedLevel) {
           practiceQuestions: {
             type: "ARRAY",
             description:
-              "An array of quiz groups. Create up to 3 multiple-choice questions for each takeaway phrase.",
+              "An array of quiz groups — exactly one group per item in keyTakeaways, in the same order. Each group's takeaway field must be 'Practice for [phrase]'. Include up to 3 multiple-choice questions per group.",
             items: {
               type: "OBJECT",
               properties: {
@@ -129,6 +130,25 @@ function parseStructuredResult(text) {
   return JSON.parse(trimmed);
 }
 
+// Higher = better quality voice. Network voices are neural; local are robotic.
+function voiceScore(voice) {
+  let score = voice.localService ? 0 : 60; // network voices are neural
+
+  const name = voice.name.toLowerCase();
+  if (name.includes("google"))           score += 20;
+  if (name.includes("microsoft"))        score += 18;
+  if (name.includes("neural"))           score += 15;
+  if (name.includes("natural"))          score += 12;
+  if (name.includes("enhanced"))         score += 10;
+  if (name.includes("premium"))          score += 10;
+  if (name.includes("siri"))             score -= 10; // often choppy
+
+  if (voice.lang === "en-US")            score += 5;
+  if (voice.lang === "en-GB")            score += 3;
+
+  return score;
+}
+
 export default function Page() {
   const [inputMode, setInputMode] = useState("text");
   const [transcript, setTranscript] = useState("");
@@ -140,6 +160,7 @@ export default function Page() {
   const [hasResult, setHasResult] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
+  const [speechRate, setSpeechRate] = useState(0.9);
   const [speakingSection, setSpeakingSection] = useState("");
   const [speechPaused, setSpeechPaused] = useState(false);
   const [answeredQuestions, setAnsweredQuestions] = useState({});
@@ -152,8 +173,13 @@ export default function Page() {
   const [episodesError, setEpisodesError] = useState("");
   const [loadingEpisodeDate, setLoadingEpisodeDate] = useState("");
 
+  const [quizElapsed, setQuizElapsed] = useState(0);
+  const [showResults, setShowResults] = useState(false);
+
   const utteranceRef = useRef(null);
   const highlightTimeoutRef = useRef(null);
+  const quizStartTimeRef = useRef(null);
+  const timerIntervalRef = useRef(null);
 
   const totalQuestions = result.practiceQuestions.reduce(
     (total, group) => total + (group.questions?.length ?? 0),
@@ -176,15 +202,17 @@ export default function Page() {
       const englishVoices = availableVoices.filter((voice) =>
         voice.lang.startsWith("en-"),
       );
-      const nextVoices =
-        englishVoices.length > 0 ? englishVoices : availableVoices;
+      const pool = englishVoices.length > 0 ? englishVoices : availableVoices;
 
-      setVoices(nextVoices);
+      // Sort: network (neural) voices first, then by provider quality
+      const ranked = [...pool].sort((a, b) => voiceScore(b) - voiceScore(a));
+
+      setVoices(ranked);
       setSelectedVoiceName((current) => {
-        if (current && nextVoices.some((voice) => voice.name === current)) {
+        if (current && ranked.some((voice) => voice.name === current)) {
           return current;
         }
-        return nextVoices[0]?.name ?? "";
+        return ranked[0]?.name ?? "";
       });
     };
 
@@ -204,6 +232,30 @@ export default function Page() {
       }
     };
   }, []);
+
+  // Start the quiz timer the first time the Quiz tab is opened
+  useEffect(() => {
+    if (activeTab !== "questions" || totalQuestions === 0) return;
+    if (quizStartTimeRef.current !== null) return;
+
+    quizStartTimeRef.current = Date.now();
+    setQuizElapsed(0);
+    timerIntervalRef.current = setInterval(() => {
+      setQuizElapsed(Math.floor((Date.now() - quizStartTimeRef.current) / 1000));
+    }, 1000);
+  }, [activeTab, totalQuestions]);
+
+  // Stop the timer and show results when every question is answered
+  useEffect(() => {
+    if (totalQuestions === 0) return;
+    if (Object.keys(answeredQuestions).length < totalQuestions) return;
+
+    clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = null;
+
+    const delay = setTimeout(() => setShowResults(true), 600);
+    return () => clearTimeout(delay);
+  }, [answeredQuestions, totalQuestions]);
 
   function stopSpeech() {
     if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -246,6 +298,8 @@ export default function Page() {
     if (selectedVoice) {
       utterance.voice = selectedVoice;
     }
+    utterance.rate  = speechRate;
+    utterance.pitch = 1;
 
     utterance.onend = () => {
       utteranceRef.current = null;
@@ -335,14 +389,34 @@ export default function Page() {
     setAnsweredQuestions({});
     setExpandedGroups({});
     setHighlightedQuizId("");
+    setShowResults(false);
+    setQuizElapsed(0);
+    quizStartTimeRef.current = null;
+    clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = null;
     stopSpeech();
 
     try {
       const structuredResult = await callGeminiApi(transcript.trim());
+      const rawTakeaways = structuredResult.keyTakeaways ?? [];
+      const rawQuestions = structuredResult.practiceQuestions ?? [];
+
+      // Guarantee one quiz group per takeaway, in the same order
+      const reconciledQuestions = rawTakeaways.map((takeaway) => {
+        const phraseLC = takeaway.phrase.toLowerCase();
+        const match = rawQuestions.find((g) => {
+          const gPhrase = (g.takeaway ?? "")
+            .replace(/^practice\s+for\s+/i, "")
+            .toLowerCase();
+          return gPhrase === phraseLC || gPhrase.includes(phraseLC) || phraseLC.includes(gPhrase);
+        });
+        return match ?? { takeaway: `Practice for ${takeaway.phrase}`, questions: [] };
+      });
+
       setResult({
         summary: structuredResult.summary ?? "",
-        keyTakeaways: structuredResult.keyTakeaways ?? [],
-        practiceQuestions: structuredResult.practiceQuestions ?? [],
+        keyTakeaways: rawTakeaways,
+        practiceQuestions: reconciledQuestions,
       });
       setActiveTab("summary");
     } catch (submitError) {
@@ -370,6 +444,33 @@ export default function Page() {
         isCorrect: selectedOption === correctAnswer,
       },
     }));
+  }
+
+  function formatTime(secs) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  function getResultMessage(score, total) {
+    const pct = total > 0 ? (score / total) * 100 : 0;
+    if (pct === 100) return { emoji: "🏆", heading: "Perfect Score!", body: "Outstanding! You got every single answer right." };
+    if (pct >= 80)  return { emoji: "🎉", heading: "Excellent Work!", body: "You have a strong grasp of this material. Keep it up!" };
+    if (pct >= 60)  return { emoji: "👍", heading: "Good Job!", body: "Solid progress! A quick review of the takeaways will help you nail it next time." };
+    if (pct >= 40)  return { emoji: "📚", heading: "Keep Practicing!", body: "You're getting there. Try reviewing the vocabulary before attempting again." };
+    return           { emoji: "💪", heading: "Don't Give Up!", body: "Learning takes time. Review the key takeaways and give it another shot!" };
+  }
+
+  function handleRetry() {
+    setShowResults(false);
+    setAnsweredQuestions({});
+    setExpandedGroups({});
+    setQuizElapsed(0);
+    quizStartTimeRef.current = Date.now();
+    clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = setInterval(() => {
+      setQuizElapsed(Math.floor((Date.now() - quizStartTimeRef.current) / 1000));
+    }, 1000);
   }
 
   async function fetchEpisodes() {
@@ -454,17 +555,6 @@ export default function Page() {
 
   const summaryButtonLabel =
     speakingSection === "summary" ? (speechPaused ? "Resume" : "Pause") : "Listen";
-
-  const takeawaysButtonLabel =
-    speakingSection === "takeaways"
-      ? speechPaused
-        ? "Resume"
-        : "Pause"
-      : "Listen";
-
-  const takeawaysNarration = result.keyTakeaways
-    .map((item) => `${item.phrase}. ${item.definition}. Example: ${item.example}`)
-    .join(" ");
 
   return (
     <main className={styles.page}>
@@ -645,22 +735,48 @@ export default function Page() {
             {!error && !isLoading ? (
               <>
                 <div className={styles.voiceRow}>
-                  <label className={styles.sectionLabel} htmlFor="voice-select">
-                    Choose a Voice
-                  </label>
-                  <select
-                    className={styles.voiceSelect}
-                    id="voice-select"
-                    onChange={(event) => setSelectedVoiceName(event.target.value)}
-                    value={selectedVoiceName}
-                  >
-                    {voices.map((voice) => (
-                      <option key={`${voice.name}-${voice.lang}`} value={voice.name}>
-                        {voice.name} ({voice.lang})
-                        {voice.localService ? " [Local]" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <div className={styles.voiceField}>
+                    <label className={styles.sectionLabel} htmlFor="voice-select">
+                      Voice
+                    </label>
+                    <select
+                      className={styles.voiceSelect}
+                      id="voice-select"
+                      onChange={(event) => setSelectedVoiceName(event.target.value)}
+                      value={selectedVoiceName}
+                    >
+                      {voices.map((voice) => (
+                        <option key={`${voice.name}-${voice.lang}`} value={voice.name}>
+                          {voice.localService ? "" : "◆ "}{voice.name} ({voice.lang})
+                        </option>
+                      ))}
+                    </select>
+                    {voices.find((v) => v.name === selectedVoiceName)?.localService ? (
+                      <p className={styles.voiceHint}>
+                        Tip: voices marked ◆ are neural (much better quality). Use Chrome or Edge for the best options.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className={styles.voiceField}>
+                    <p className={styles.sectionLabel}>Speed</p>
+                    <div className={styles.rateRow}>
+                      {[
+                        { label: "Slow", value: 0.75 },
+                        { label: "Normal", value: 0.9 },
+                        { label: "Fast", value: 1.1 },
+                      ].map((preset) => (
+                        <button
+                          className={`${styles.rateButton} ${speechRate === preset.value ? styles.rateButtonActive : ""}`}
+                          key={preset.value}
+                          onClick={() => setSpeechRate(preset.value)}
+                          type="button"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <div className={styles.tabs}>
@@ -698,36 +814,44 @@ export default function Page() {
 
                   {activeTab === "takeaways" ? (
                     <>
-                      <button
-                        className={`${styles.audioButton} ${speakingSection === "takeaways" && !speechPaused ? styles.audioButtonPlaying : ""}`}
-                        onClick={() => handleSpeech("takeaways", takeawaysNarration)}
-                        type="button"
-                      >
-                        {takeawaysButtonLabel}
-                      </button>
-
                       {result.keyTakeaways.length > 0 ? (
                         <div className={styles.takeawayList}>
-                          {result.keyTakeaways.map((item) => (
-                            <article
-                              className={styles.takeawayCard}
-                              key={`${item.phrase}-${item.example}`}
-                            >
-                              <button
-                                className={styles.takeawayLink}
-                                onClick={() => jumpToQuiz(item.phrase)}
-                                type="button"
+                          {result.keyTakeaways.map((item) => {
+                            const sectionKey = `takeaway-${item.phrase}`;
+                            const isPlaying = speakingSection === sectionKey && !speechPaused;
+                            const isPaused  = speakingSection === sectionKey && speechPaused;
+                            const narration = `${item.phrase}. ${item.definition}. Example: ${item.example}`;
+                            return (
+                              <article
+                                className={styles.takeawayCard}
+                                key={`${item.phrase}-${item.example}`}
                               >
-                                {item.phrase}
-                              </button>
-                              <p className={styles.takeawayText}>
-                                {item.definition}
-                              </p>
-                              <p className={styles.takeawayExample}>
-                                Example: {item.example}
-                              </p>
-                            </article>
-                          ))}
+                                <div className={styles.takeawayCardHead}>
+                                  <button
+                                    className={styles.takeawayLink}
+                                    onClick={() => jumpToQuiz(item.phrase)}
+                                    type="button"
+                                  >
+                                    {item.phrase}
+                                  </button>
+                                  <button
+                                    aria-label={isPlaying ? "Pause" : isPaused ? "Resume" : "Listen"}
+                                    className={`${styles.takeawayAudioBtn} ${isPlaying ? styles.takeawayAudioBtnPlaying : ""}`}
+                                    onClick={() => handleSpeech(sectionKey, narration)}
+                                    type="button"
+                                  >
+                                    {isPlaying ? "⏸" : "▶"}
+                                  </button>
+                                </div>
+                                <p className={styles.takeawayText}>
+                                  {item.definition}
+                                </p>
+                                <p className={styles.takeawayExample}>
+                                  Example: {item.example}
+                                </p>
+                              </article>
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className={styles.muted}>
@@ -739,11 +863,55 @@ export default function Page() {
 
                   {activeTab === "questions" ? (
                     <>
+                      {showResults && typeof document !== "undefined" ? createPortal(
+                        (() => {
+                          const msg = getResultMessage(currentScore, totalQuestions);
+                          return (
+                            <div className={styles.resultsOverlay}>
+                              <div className={styles.resultsCard}>
+                                <div className={styles.resultsEmoji}>{msg.emoji}</div>
+                                <h2 className={styles.resultsHeading}>{msg.heading}</h2>
+                                <p className={styles.resultsBody}>{msg.body}</p>
+                                <div className={styles.resultsScore}>
+                                  <span className={styles.resultsScoreNum}>{currentScore}</span>
+                                  <span className={styles.resultsScoreDen}> / {totalQuestions}</span>
+                                </div>
+                                <p className={styles.resultsTime}>
+                                  Completed in {formatTime(quizElapsed)}
+                                </p>
+                                <div className={styles.resultsActions}>
+                                  <button
+                                    className={styles.retryButton}
+                                    onClick={handleRetry}
+                                    type="button"
+                                  >
+                                    Try Again
+                                  </button>
+                                  <button
+                                    className={styles.reviewButton}
+                                    onClick={() => setShowResults(false)}
+                                    type="button"
+                                  >
+                                    Review Answers
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })(),
+                        document.body
+                      ) : null}
+
                       <div className={styles.scoreboard}>
                         <span>Quiz Progress</span>
-                        <span>
-                          {currentScore} / {totalQuestions}
-                        </span>
+                        <div className={styles.scoreboardRight}>
+                          <span>{currentScore} / {totalQuestions}</span>
+                          {quizStartTimeRef.current !== null ? (
+                            <span className={styles.timer}>
+                              {formatTime(quizElapsed)}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
 
                       {result.practiceQuestions.length > 0 ? (
