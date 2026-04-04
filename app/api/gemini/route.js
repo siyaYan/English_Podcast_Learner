@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const MODEL = "gemini-3-flash-preview";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

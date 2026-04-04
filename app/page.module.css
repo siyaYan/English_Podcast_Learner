@@ -523,6 +523,169 @@
   line-height: 1.6;
 }
 
+.bbcRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.bbcButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #c6d4e0;
+  border-radius: 999px;
+  background: #fff;
+  color: #1b587c;
+  padding: 9px 16px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.bbcButton:hover {
+  background: #f0f8ff;
+  border-color: #1f6f95;
+}
+
+.episodePanel {
+  margin-top: 10px;
+  border: 1px solid #c6d4e0;
+  border-radius: 18px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+.episodeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #dde6ee;
+  background: #f0f8fb;
+}
+
+.episodeAttribution {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1b587c;
+  letter-spacing: 0.02em;
+}
+
+.episodeCloseBtn {
+  border: 0;
+  background: transparent;
+  color: #7a95a8;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.episodeCloseBtn:hover {
+  background: #dde6ee;
+  color: #17324c;
+}
+
+.episodeLoading,
+.episodeErr {
+  padding: 20px 16px;
+  text-align: center;
+  color: #63788b;
+  font-size: 0.9rem;
+}
+
+.episodeErr {
+  color: #9b2f2f;
+}
+
+.episodeList {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.episodeItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eef4f8;
+}
+
+.episodeItem:last-child {
+  border-bottom: 0;
+}
+
+.episodeMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.episodeTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #17324c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.episodeDate {
+  font-size: 0.78rem;
+  color: #7a95a8;
+}
+
+.episodeActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.episodeLoadBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  border: 1px solid #1f6f95;
+  border-radius: 999px;
+  background: #1f6f95;
+  color: #fff;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.episodeLoadBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.episodeVisitLink {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #c6d4e0;
+  border-radius: 999px;
+  background: transparent;
+  color: #4e6275;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.episodeVisitLink:hover {
+  background: #eef4f8;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

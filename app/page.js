@@ -146,6 +146,12 @@ export default function Page() {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [highlightedQuizId, setHighlightedQuizId] = useState("");
 
+  const [showEpisodePicker, setShowEpisodePicker] = useState(false);
+  const [episodes, setEpisodes] = useState([]);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [episodesError, setEpisodesError] = useState("");
+  const [loadingEpisodeDate, setLoadingEpisodeDate] = useState("");
+
   const utteranceRef = useRef(null);
   const highlightTimeoutRef = useRef(null);
 
@@ -366,6 +372,52 @@ export default function Page() {
     }));
   }
 
+  async function fetchEpisodes() {
+    if (showEpisodePicker) {
+      setShowEpisodePicker(false);
+      return;
+    }
+    setShowEpisodePicker(true);
+    if (episodes.length > 0 || episodesLoading) return;
+    setEpisodesLoading(true);
+    setEpisodesError("");
+    try {
+      const res = await fetch("/api/bbc-episodes");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load episodes");
+      setEpisodes(data.episodes || []);
+    } catch (err) {
+      setEpisodesError(
+        err instanceof Error ? err.message : "Failed to load episodes",
+      );
+    } finally {
+      setEpisodesLoading(false);
+    }
+  }
+
+  async function loadEpisodeTranscript(ep) {
+    if (!ep.date) {
+      if (ep.scriptUrl || ep.bbcLink)
+        window.open(ep.scriptUrl || ep.bbcLink, "_blank", "noopener");
+      return;
+    }
+    setLoadingEpisodeDate(ep.date);
+    try {
+      const res = await fetch(`/api/bbc-transcript?date=${ep.date}`);
+      const data = await res.json();
+      if (data.transcript) {
+        setTranscript(data.transcript);
+        setShowEpisodePicker(false);
+      } else {
+        window.open(ep.scriptUrl || ep.bbcLink, "_blank", "noopener");
+      }
+    } catch {
+      if (ep.scriptUrl) window.open(ep.scriptUrl, "_blank", "noopener");
+    } finally {
+      setLoadingEpisodeDate("");
+    }
+  }
+
   function jumpToQuiz(phrase) {
     const quizId = `quiz-${slugifyQuizId(phrase)}`;
     const nextExpandedGroups = result.practiceQuestions.reduce((all, group) => {
@@ -456,12 +508,97 @@ export default function Page() {
           </div>
 
           {inputMode === "text" ? (
-            <textarea
-              className={styles.textArea}
-              onChange={(event) => setTranscript(event.target.value)}
-              placeholder="Paste your podcast transcript here. Shorter transcripts work best."
-              value={transcript}
-            />
+            <>
+              <textarea
+                className={styles.textArea}
+                onChange={(event) => setTranscript(event.target.value)}
+                placeholder="Paste your podcast transcript here. Shorter transcripts work best."
+                value={transcript}
+              />
+              <div className={styles.bbcRow}>
+                <button
+                  className={styles.bbcButton}
+                  onClick={fetchEpisodes}
+                  type="button"
+                >
+                  Browse BBC 6 Minute English
+                </button>
+              </div>
+              {showEpisodePicker ? (
+                <div className={styles.episodePanel}>
+                  <div className={styles.episodeHeader}>
+                    <span className={styles.episodeAttribution}>
+                      BBC Learning English — 6 Minute English
+                    </span>
+                    <button
+                      className={styles.episodeCloseBtn}
+                      onClick={() => setShowEpisodePicker(false)}
+                      type="button"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {episodesLoading ? (
+                    <div className={styles.episodeLoading}>
+                      Loading episodes…
+                    </div>
+                  ) : episodesError ? (
+                    <div className={styles.episodeErr}>{episodesError}</div>
+                  ) : (
+                    <div className={styles.episodeList}>
+                      {episodes.map((ep) => (
+                        <div
+                          className={styles.episodeItem}
+                          key={ep.date || ep.title}
+                        >
+                          <div className={styles.episodeMeta}>
+                            <span className={styles.episodeTitle}>
+                              {ep.title}
+                            </span>
+                            {ep.pubDate ? (
+                              <span className={styles.episodeDate}>
+                                {new Date(ep.pubDate).toLocaleDateString(
+                                  "en-GB",
+                                  {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  },
+                                )}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className={styles.episodeActions}>
+                            <button
+                              className={styles.episodeLoadBtn}
+                              disabled={Boolean(loadingEpisodeDate)}
+                              onClick={() => loadEpisodeTranscript(ep)}
+                              type="button"
+                            >
+                              {loadingEpisodeDate === ep.date ? (
+                                <span className={styles.spinner} />
+                              ) : (
+                                "Load"
+                              )}
+                            </button>
+                            {ep.scriptUrl ? (
+                              <a
+                                className={styles.episodeVisitLink}
+                                href={ep.scriptUrl}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                              >
+                                Visit
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className={styles.soonCard}>
               <strong>Feature coming soon.</strong> Direct podcast-link

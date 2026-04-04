@@ -1,45 +1,56 @@
 # English Podcast Learner
 
-This project has been refactored from a static HTML page plus Express proxy into a Next.js app that is ready for Vercel deployment.
+An AI-powered English learning tool. Paste a podcast transcript — or load one directly from BBC Learning English — and get a CEFR-tailored lesson with a summary, vocabulary takeaways, and a practice quiz.
 
-## What changed
+## Features
 
-- The UI now runs as a Next.js App Router application.
-- The old Express server was replaced with a server-side proxy route at `/api/gemini`.
-- The Google API key stays on the server and is not exposed to the browser.
-- The project no longer depends on a custom Docker server for normal deployment.
+- **BBC episode browser** — browse the latest 10 BBC 6 Minute English episodes, auto-load their transcripts into the app, or open the episode page directly
+- **AI lesson generation** — powered by Google Gemini; produces a summary, key idioms/phrasal verbs, and multiple-choice quiz questions calibrated to your level
+- **CEFR level selector** — choose from A1 through C2; vocabulary and quiz difficulty adjust accordingly
+- **Text-to-speech** — listen to the summary or all takeaways using your browser's built-in voices; pause, resume, and switch voices
+- **Interactive quiz** — answers lock on selection, immediate correct/incorrect feedback, score tracker, and jump-to-quiz links from vocabulary cards
 
 ## Stack
 
-- Next.js
-- React
-- Vercel serverless route handlers
-- Browser Speech Synthesis API for audio playback
-- Google Gemini API for lesson generation
+- Next.js 15 (App Router)
+- React 19
+- Google Gemini API (`gemini-2.0-flash-preview`)
+- Browser Speech Synthesis API
+- Vercel serverless functions
 
-## Environment variables
+## Project structure
 
-Create a local env file:
+```
+app/
+  api/
+    gemini/route.js         # Gemini API proxy — keeps the key server-side
+    bbc-episodes/route.js   # fetches latest 10 BBC 6 Minute English episodes from RSS
+    bbc-transcript/route.js # fetches and extracts transcript from a BBC episode page
+  globals.css               # global styles
+  layout.js                 # root layout and metadata
+  page.js                   # main client UI
+  page.module.css           # component styles
+```
+
+## Setup
+
+Requires Node.js 20+. An `.nvmrc` is included.
+
+```bash
+npm install
+```
+
+Copy the example env file and add your Gemini API key:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Set:
-
-```bash
+```env
 GEMINI_API_KEY=your_google_ai_api_key
 ```
 
-## Local development
-
-Use Node.js 20 or newer. An `.nvmrc` file is included and points to `20`.
-
-Install dependencies:
-
-```bash
-npm install
-```
+Get a free key at [aistudio.google.com](https://aistudio.google.com).
 
 Start the dev server:
 
@@ -47,46 +58,29 @@ Start the dev server:
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Open `http://localhost:3000`.
 
-## API proxy
+## API routes
 
-The frontend calls the local Next.js route:
+| Route | Method | Description |
+|---|---|---|
+| `/api/gemini` | POST | Proxies requests to the Gemini API; API key never leaves the server |
+| `/api/bbc-episodes` | GET | Parses the BBC 6 Minute English podcast RSS and returns the latest 10 episodes |
+| `/api/bbc-transcript` | GET | Fetches an episode page from BBC Learning English and extracts the script text |
 
-```text
-/api/gemini
-```
-
-That route forwards the request to Google:
-
-```text
-https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent
-```
-
-This is the Vercel-safe replacement for the old Express `/proxy/gemini` endpoint.
+The BBC routes require no API key. If transcript extraction fails (e.g. HTML structure changes), the client falls back to opening the episode page in a new tab.
 
 ## Deploy to Vercel
 
-1. Push this repository to GitHub, GitLab, or Bitbucket.
-2. Import the project into Vercel.
-3. In Vercel project settings, add `GEMINI_API_KEY` as an environment variable.
+1. Push to GitHub, GitLab, or Bitbucket.
+2. Import the project in [Vercel](https://vercel.com).
+3. Add `GEMINI_API_KEY` as an environment variable in project settings.
 4. Deploy.
 
-No custom server is required. Vercel will build the Next.js app and host the `/api/gemini` route automatically.
+No custom server needed — Vercel handles all three API routes automatically.
 
 ## Notes
 
-- The `Podcast Link` mode is still intentionally disabled. The old project also did not implement real link ingestion.
-- Speech playback still uses the browser's built-in voices, so available voices depend on the user's device and browser.
-- If Gemini returns malformed JSON or rate-limits a request, the client shows the server error instead of exposing the API key.
-
-## Project structure
-
-```text
-app/
-  api/gemini/route.js   # server-side Gemini proxy for Vercel
-  globals.css           # app-wide styles
-  layout.js             # root layout and metadata
-  page.js               # main client UI
-  page.module.css       # component styles
-```
+- **Podcast Link mode** is disabled. It is reserved for a future direct-URL ingestion pipeline.
+- **Speech voices** depend on the user's OS and browser; no additional setup needed.
+- Gemini requests include 3 retries with exponential backoff. If all attempts fail, the error message is shown — the API key is never exposed.
